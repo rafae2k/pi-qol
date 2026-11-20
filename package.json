@@ -1,0 +1,64 @@
+{
+  "name": "pi-qol",
+  "version": "0.1.0",
+  "description": "Quality-of-life extensions for the pi coding agent: a pinned conversation summary, a compact footer with the session id, and image paste with thumbnails.",
+  "type": "module",
+  "license": "MIT",
+  "author": "rafae2k",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafae2k/pi-qol.git"
+  },
+  "homepage": "https://github.com/rafae2k/pi-qol#readme",
+  "bugs": "https://github.com/rafae2k/pi-qol/issues",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "coding-agent",
+    "tui",
+    "summary",
+    "footer",
+    "clipboard",
+    "image-paste"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "extensions",
+    "src",
+    "docs/*.png",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/session-header.ts",
+      "./extensions/compact-footer.ts",
+      "./extensions/image-paste.ts"
+    ],
+    "image": "https://raw.githubusercontent.com/rafae2k/pi-qol/main/docs/overview.png"
+  },
+  "scripts": {
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-coding-agent": "1.5.2",
+    "@earendil-works/pi-tui": "1.5.2",
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@12.15.0"
+}
