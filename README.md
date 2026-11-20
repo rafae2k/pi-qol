@@ -90,11 +90,11 @@ Settings go under the `pi-qol` key of pi's `settings.json` (`~/.pi/agent/setting
 }
 ```
 
-| Key               | Default                   | Meaning                                                            |
-| ----------------- | ------------------------- | ------------------------------------------------------------------ |
-| `summaryModel`    | the session's model       | `provider/model-id` that writes summaries. A small model is plenty |
-| `summaryEvery`    | `3`                       | Your messages between automatic refreshes                          |
-| `summaryLanguage` | the language you write in | Language of the title and summary                                  |
+| Key               | Default                   | Meaning                                                                                                                                       |
+| ----------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `summaryModel`    | the session's model       | `provider/model-id` that writes summaries. A small model is plenty. If it fails (quota, outage), the session's model takes over for 5 minutes |
+| `summaryEvery`    | `3`                       | Your messages between automatic refreshes                                                                                                     |
+| `summaryLanguage` | the language you write in | Language of the title and summary                                                                                                             |
 
 ### Choose extensions
 

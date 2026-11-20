@@ -1,6 +1,6 @@
 {
   "name": "pi-qol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Quality-of-life extensions for the pi coding agent: a pinned conversation summary, a compact footer with the session id, and image paste with thumbnails.",
   "type": "module",
   "license": "MIT",

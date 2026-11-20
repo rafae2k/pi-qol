@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { readConfig, splitModelRef } from "../src/config.ts";
 import { shortSessionId } from "../src/footer.ts";
+import { FALLBACK_COOLDOWN_MS, summaryCandidates } from "../src/models.ts";
 import {
   buildPrompt,
   buildRequest,
@@ -80,27 +81,27 @@ export default function sessionHeader(pi: ExtensionAPI) {
     );
   }
 
-  function pickModel(ctx: ExtensionContext) {
+  // Configured summary model that failed (quota, outage): skipped until this time.
+  let configuredFailedUntil = 0;
+
+  function configuredModel(ctx: ExtensionContext) {
     const { summaryModel } = readConfig(pi.getSettings());
-    if (summaryModel) {
-      const found = ctx.modelRegistry.find(...splitModelRef(summaryModel));
-      if (found) return found;
-      if (ctx.hasUI)
-        ctx.ui.notify(`pi-qol: summaryModel "${summaryModel}" not found, using the session model`, "warning");
+    if (!summaryModel) return undefined;
+    const found = ctx.modelRegistry.find(...splitModelRef(summaryModel));
+    if (!found && ctx.hasUI && configuredFailedUntil === 0) {
+      ctx.ui.notify(`pi-qol: summaryModel "${summaryModel}" not found, using the session model`, "warning");
+      configuredFailedUntil = Number.POSITIVE_INFINITY; // warn once per session
     }
-    return ctx.model;
+    return found;
   }
 
-  async function request(
+  /** One summary call. Throws on a provider error, including one reported in the reply. */
+  async function callModel(
     ctx: ExtensionContext,
+    model: NonNullable<ExtensionContext["model"]>,
+    prompt: string,
     transcript: string,
-    userTurns: number,
-    budget: number,
-  ): Promise<Outcome> {
-    const model = pickModel(ctx);
-    if (!model) return "failed";
-    const prompt = buildPrompt(budget, readConfig(pi.getSettings()).summaryLanguage);
-    const gen = generation;
+  ) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
     try {
@@ -120,8 +121,39 @@ export default function sessionHeader(pi: ExtensionAPI) {
         // tools); its own session id keeps it apart from the running conversation.
         { signal: ac.signal, cacheRetention: "none", sessionId: randomUUID() },
       );
+      if (res.stopReason === "error" || res.stopReason === "aborted") {
+        throw new Error(res.errorMessage ?? `the model stopped with "${res.stopReason}"`);
+      }
+      return replyText(res.content);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function request(
+    ctx: ExtensionContext,
+    transcript: string,
+    userTurns: number,
+    budget: number,
+  ): Promise<Outcome> {
+    const prompt = buildPrompt(budget, readConfig(pi.getSettings()).summaryLanguage);
+    const gen = generation;
+    const configured = configuredModel(ctx);
+    const candidates = summaryCandidates(configured, ctx.model, configuredFailedUntil, Date.now());
+    let lastError: unknown;
+    for (const model of candidates) {
+      let reply: string;
+      try {
+        reply = await callModel(ctx, model, prompt, transcript);
+      } catch (err) {
+        if (gen !== generation) return "failed"; // the session moved on: nothing to report
+        lastError = err;
+        // The configured model is out (quota, outage): use the session's model for a while.
+        if (model === configured) configuredFailedUntil = Date.now() + FALLBACK_COOLDOWN_MS;
+        continue;
+      }
       if (gen !== generation) return "failed";
-      const parsed = parseSummary(replyText(res.content));
+      const parsed = parseSummary(reply);
       if (!parsed) return "failed";
       if (!fitsHeader(parsed, columns())) return "too_long";
 
@@ -132,15 +164,15 @@ export default function sessionHeader(pi: ExtensionAPI) {
       if (autoNamed) pi.setSessionName(parsed.title);
       showHeader(ctx);
       return "ok";
-    } catch (err) {
-      if (gen !== generation) return "failed"; // the session moved on: nothing to report
-      // The summary is an accessory: a failure must not disturb the session, so warn and carry on.
-      if (ctx.hasUI)
-        ctx.ui.notify(`pi-qol: summary failed: ${err instanceof Error ? err.message : String(err)}`, "warning");
-      return "failed";
-    } finally {
-      clearTimeout(timer);
     }
+    // Every model failed. The summary is an accessory: warn and carry on, never disturb the session.
+    if (lastError !== undefined && ctx.hasUI) {
+      ctx.ui.notify(
+        `pi-qol: summary failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+        "warning",
+      );
+    }
+    return "failed";
   }
 
   async function summarize(ctx: ExtensionContext, force = false) {
@@ -163,6 +195,7 @@ export default function sessionHeader(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     current = null;
+    configuredFailedUntil = 0;
     closeOverlay();
     for (const entry of ctx.sessionManager.getEntries() as any[]) {
       if (entry.type === "custom" && entry.customType === ENTRY_TYPE && entry.data) current = entry.data as Summary;
